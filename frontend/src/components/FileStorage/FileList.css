@@ -1,0 +1,118 @@
+.file-list {
+  width: 100%;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 800px;
+}
+
+th, td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #495057;
+}
+
+tr:hover {
+  background-color: #f8f9fa;
+}
+
+.file-name {
+  font-weight: 500;
+  color: #212529;
+}
+
+.rename-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.rename-input {
+  padding: 4px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-button {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.action-button.download {
+  background-color: #28a745;
+  color: white;
+}
+
+.action-button.rename {
+  background-color: #ffc107;
+  color: #000;
+}
+
+.action-button.delete {
+  background-color: #dc3545;
+  color: white;
+}
+
+.action-button.copy {
+  background-color: #17a2b8;
+  color: white;
+}
+
+.action-button.save {
+  background-color: #28a745;
+  color: white;
+}
+
+.action-button.cancel {
+  background-color: #6c757d;
+  color: white;
+}
+
+.action-button:hover {
+  opacity: 0.9;
+}
+
+.no-files {
+  text-align: center;
+  padding: 2rem;
+  color: #6c757d;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 768px) {
+  th, td {
+    padding: 8px;
+    font-size: 14px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .action-button {
+    width: 100%;
+  }
+} 

@@ -1,0 +1,17 @@
+Django==5.2.11
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+Pillow==10.2.0
+python-dotenv==1.0.1
+django-filter==24.1
+markdown==3.5.2
+drf-yasg==1.21.7  # для Swagger/OpenAPI документации (видно в urls.py)
+django-cleanup==8.1.0  # для автоматической очистки файлов
+django-storages==1.14.2  # для работы с файловым хранилищем
+python-magic==0.4.27  # для определения MIME-типов файлов
+django-environ==0.11.2  # для управления настройками окружения
+whitenoise==6.6.0
+gunicorn==21.2.0
+djoser==2.2.2  # для аутентификации (видно по эндпоинтам в urls.py)
+djangorestframework-simplejwt==5.3.1  # для JWT токенов
+psycopg2-binary==2.9.9  # адаптер PostgreSQL
