@@ -1,5 +1,6 @@
+import { toast } from 'react-hot-toast';
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-
+import { checkAuthStatus } from '../auth/authSlice';
 
 const API_URL = `${import.meta.env.VITE_SERVER_URL}/api`;
 
@@ -18,12 +19,16 @@ const getHeaders = () => ({
 // Асинхронные операции (thunks)
 export const fetchFiles = createAsyncThunk(
     'files/fetchFiles',
-    async ({ userId }, { rejectWithValue }) => {
+    async (payload = {}, { rejectWithValue }) => {
         try {
+            // Безопасно достаем userId, даже если payload не был передан
+            const userId = payload?.userId;
+
             let url = `${API_URL}/files/`;
-            if (userId !== undefined) {
+            if (userId !== undefined && userId !== null) {
                 url += `?user_id=${userId}`;
             }
+
             const response = await fetch(url, {
                 credentials: 'include',
                 headers: {
@@ -32,7 +37,9 @@ export const fetchFiles = createAsyncThunk(
             });
 
             if (!response.ok) {
-                throw new Error('Ошибка при загрузке файлов');
+                // Если сервер вернул ошибку (например, 401 или 403), читаем её текст
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Ошибка при загрузке файлов');
             }
             return await response.json();
         } catch (error) {
@@ -64,8 +71,11 @@ export const uploadFile = createAsyncThunk(
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Ошибка при загрузке файла');
             }
-            // После успешной загрузки получаем обновленный список файлов
-            dispatch(fetchFiles());
+            
+            dispatch(checkAuthStatus());
+
+            return await response.json();
+
         } catch (error) {
             return rejectWithValue(error.message);
         }
@@ -83,9 +93,16 @@ export const deleteFile = createAsyncThunk(
             });
 
             if (!response.ok) {
-                throw new Error('Ошибка при удалении файла');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Ошибка при удалении файла');
             }
+            // 1. Перезапрашиваем обновленный список файлов у Django
             dispatch(fetchFiles());
+            // 2. Перезапрашиваем профиль пользователя, чтобы бэкенд 
+            // отдал новые цифры свободного/занятого места на диске!
+            dispatch(checkAuthStatus());
+
+            return fileId; // Возвращаем ID удаленного файла
         } catch (error) {
             return rejectWithValue(error.message);
         }
@@ -99,27 +116,36 @@ export const renameFile = createAsyncThunk(
             const response = await fetch(`${API_URL}/files/${fileId}/`, {
                 method: 'PATCH',
                 credentials: 'include',
-                headers: getHeaders(),
-                body: JSON.stringify({ name: newName }), // Отправляем новое имя в теле запроса
+                headers: getHeaders(), // Подставит Content-Type и X-CSRFToken
+                body: JSON.stringify({ name: newName }), // Передаем новое имя
             });
 
             if (!response.ok) {
-                throw new Error('Ошибка при переименовании файла');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Ошибка при переименовании файла');
             }
 
-            // После успешного переименования обновляем список файлов
+            const data = await response.json();
+
+            // Выходим из режима редактирования строки на фронтенде
+            dispatch(fileRenamed());
+
+            // Принудительно обновляем список файлов на экране, чтобы увидеть новое имя
             dispatch(fetchFiles());
+
+            return data;
         } catch (error) {
             return rejectWithValue(error.message);
         }
     }
 );
 
-
 export const downloadFile = createAsyncThunk(
     'files/downloadFile',
-    async (fileId, { rejectWithValue }) => {
+    // Принимаем объект с fileId и originalName
+    async ({ fileId, originalName }, { rejectWithValue, dispatch }) => {
         try {
+            // URL запроса формируется строго по ID
             const response = await fetch(`${API_URL}/files/${fileId}/download/`, {
                 method: 'GET',
                 credentials: 'include',
@@ -130,38 +156,49 @@ export const downloadFile = createAsyncThunk(
                 throw new Error('Ошибка при скачивании файла');
             }
 
-            // Получаем файл как Blob (бинарные данные)
+            // Читаем бинарный файл
             const blob = await response.blob();
-
-            // Создаем временную ссылку и инициируем скачивание
             const downloadUrl = window.URL.createObjectURL(blob);
+
             const a = document.createElement('a');
             a.href = downloadUrl;
-            a.download = 'downloaded_file'; // Можно задать имя файла, если API его возвращает
+
+            // Берем имя, которое уже было на фронтенде!
+            a.download = originalName || 'downloaded_file';
 
             document.body.appendChild(a);
             a.click();
 
-            // Убираем элемент из DOM и освобождаем память
             window.URL.revokeObjectURL(downloadUrl);
             document.body.removeChild(a);
+
+            // Мгновенное обновление даты последнего скачивания в таблице
+            dispatch(fetchFiles());
+
+            return fileId;
         } catch (error) {
             return rejectWithValue(error.message);
         }
     }
 );
 
-
 export const copyLink = createAsyncThunk(
     'files/copyLink',
     async (fileId, { rejectWithValue }) => {
         try {
-            // Формируем ссылку на файл. Это может быть прямая ссылка или ссылка на страницу просмотра.
-            const fileUrl = `${window.location.origin}/files/${fileId}`;
+            // // Формируем ссылку на файл. Это может быть прямая ссылка или ссылка на страницу просмотра.
+            // const fileUrl = `${window.location.origin}/files/${fileId}`;
+            // Формируем публичную ссылку, которая ведет на бэкенд для скачивания
+            const shareableUrl = `${import.meta.env.VITE_SERVER_URL}/api/shared/${fileId}/`;
 
-            // Копируем текст в буфер обмена
-            await navigator.clipboard.writeText(fileUrl);
+            // Копируем сгенерированную ссылку в буфер обмена браузера
+            await navigator.clipboard.writeText(shareableUrl);
+            // Показываем красивое всплывающее уведомление пользователю
+            toast.success('Ссылка успешно скопирована в буфер обмена!');
+
+            return fileId;
         } catch (error) {
+            toast.error('Не удалось скопировать ссылку');
             return rejectWithValue('Не удалось скопировать ссылку в буфер обмена');
         }
     }
@@ -172,6 +209,9 @@ const initialState = {
     status: 'idle', // 'loading' | 'succeeded' | 'failed'
     error: null,
     successMessage: '',
+    selectedFile: null,
+    comment: '',
+    isUploading: false,
 };
 
 
@@ -179,6 +219,20 @@ const fileStorageSlice = createSlice({
     name: 'fileStorage',
     initialState,
     reducers: {
+        setSelectedFile: (state, action) => {
+            state.selectedFile = action.payload;
+        },
+        setComment: (state, action) => {
+            state.comment = action.payload;
+        },
+        setIsUploading: (state, action) => {
+            state.isUploading = action.payload;
+        },
+        resetForm: (state) => {
+            state.selectedFile = null;
+            state.comment = '';
+            state.error = null;
+        },
         setSuccessMessage: (state, action) => {
             state.successMessage = action.payload;
         },
@@ -210,40 +264,121 @@ const fileStorageSlice = createSlice({
             state.newName = '';
         },
     },
+    // extraReducers: (builder) => {
+    //     builder
+    //         .addCase(fetchFiles.pending, (state) => {
+    //             state.status = 'loading';
+    //             state.error = null;
+    //         })
+    //         .addCase(fetchFiles.fulfilled, (state, action) => {
+    //             state.status = 'succeeded';
+    //             state.files = action.payload;
+    //         })
+    //         .addCase(fetchFiles.rejected, (state, action) => {
+    //             state.status = 'failed';
+    //             state.error = action.payload || 'Неизвестная ошибка';
+    //         })
+    //         // Обработка других асинхронных операций
+    //         // .addMatcher(
+    //         //     (action) =>
+    //         //         action.type.endsWith('/fulfilled') && !action.type.includes('fetchFiles'),
+    //         //     (state) => {
+    //         //         state.status = 'succeeded';
+    //         //         state.successMessage = 'Операция выполнена успешно';
+    //         //     }
+    //         // )
+    //         // .addMatcher(
+    //         //     (action) => action.type.endsWith('/rejected'),
+    //         //     (state, action) => {
+    //         //         state.status = 'failed';
+    //         //         state.error = action.payload || 'Произошла ошибка';
+    //         //     }
+    //         // );
+    //         .addMatcher(
+    //             (action) =>
+    //                 action.type.startsWith('files/') &&
+    //                 action.type.endsWith('/fulfilled') &&
+    //                 !action.type.includes('fetchFiles'),
+    //             (state) => {
+    //                 state.status = 'succeeded';
+    //                 state.successMessage = 'Операция выполнена успешно';
+    //                 state.error = null; // При успехе принудительно очищаем старые ошибки
+    //             }
+    //         )
+    //         //  ИСПРАВЛЕНО: реагирует на ошибку только ФАЙЛОВЫХ экшенов (содержат слово 'files/')
+    //         .addMatcher(
+    //             (action) =>
+    //                 action.type.startsWith('files/') &&
+    //                 action.type.endsWith('/rejected'),
+    //             (state, action) => {
+    //                 state.status = 'failed';
+    //                 state.error = action.payload || 'Произошла ошибка';
+    //             }
+    //         );
+    // },
     extraReducers: (builder) => {
         builder
+            // --- Загрузка списка файлов (fetchFiles) ---
             .addCase(fetchFiles.pending, (state) => {
                 state.status = 'loading';
-                state.error = null;
+                state.error = null; // Очищаем старые ошибки при обновлении списка
             })
             .addCase(fetchFiles.fulfilled, (state, action) => {
                 state.status = 'succeeded';
                 state.files = action.payload;
+                state.error = null; // Гарантированная очистка ошибок при успехе
             })
             .addCase(fetchFiles.rejected, (state, action) => {
                 state.status = 'failed';
-                state.error = action.payload || 'Неизвестная ошибка';
+                // Записываем ошибку, только если запрос реально провалился
+                state.error = action.payload || 'Не удалось загрузить список файлов';
             })
-            // Обработка других асинхронных операций
-            .addMatcher(
-                (action) =>
-                    action.type.endsWith('/fulfilled') && !action.type.includes('fetchFiles'),
-                (state) => {
-                    state.status = 'succeeded';
-                    state.successMessage = 'Операция выполнена успешно';
-                }
-            )
-            .addMatcher(
-                (action) => action.type.endsWith('/rejected'),
-                (state, action) => {
-                    state.status = 'failed';
-                    state.error = action.payload || 'Произошла ошибка';
-                }
-            );
+
+            // --- Загрузка нового файла (uploadFile) ---
+            .addCase(uploadFile.pending, (state) => {
+                state.status = 'loading';
+                state.error = null; // Очищаем прошлые ошибки в момент клика на кнопку!
+                state.successMessage = '';
+            })
+            .addCase(uploadFile.fulfilled, (state) => {
+                state.status = 'succeeded';
+                state.successMessage = 'Файл успешно загружен';
+                state.error = null; // Стираем любые ошибки, страница чиста
+            })
+            .addCase(uploadFile.rejected, (state, action) => {
+                state.status = 'failed';
+                state.successMessage = '';
+                state.error = action.payload || 'Ошибка при загрузке файла';
+            })
+
+            // --- Удаление файла (deleteFile) ---
+            .addCase(deleteFile.fulfilled, (state) => {
+                state.status = 'succeeded';
+                state.successMessage = 'Файл успешно удален';
+                state.error = null;
+            })
+            .addCase(deleteFile.rejected, (state, action) => {
+                state.status = 'failed';
+                state.error = action.payload || 'Ошибка при удалении файла';
+            })
+
+            // --- Переименование файла (renameFile) ---
+            .addCase(renameFile.fulfilled, (state) => {
+                state.status = 'succeeded';
+                state.successMessage = 'Файл успешно переименован';
+                state.error = null;
+            })
+            .addCase(renameFile.rejected, (state, action) => {
+                state.status = 'failed';
+                state.error = action.payload || 'Ошибка при переименовании файла';
+            });
     },
+
 });
 
-export const { setSuccessMessage, clearSuccessMessage, updateAppError, clearError, startRename, updateNewName, cancelRename, fileRenamed } =
-    fileStorageSlice.actions;
+export const { setSuccessMessage, clearSuccessMessage, updateAppError, clearError,
+    startRename, updateNewName, cancelRename, fileRenamed,
+    setSelectedFile, setComment, setIsUploading, resetForm
+} = fileStorageSlice.actions;
 
 export default fileStorageSlice.reducer;

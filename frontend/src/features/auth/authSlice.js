@@ -5,13 +5,12 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 export const checkAuthStatus = createAsyncThunk(
     'auth/checkAuthStatus',
     async (_, { rejectWithValue }) => {
-        const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/profile/`, {
+        const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/profile/`, {
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
         });
 
         if (response.ok) {
-            // Если пользователь авторизован, сервер вернет данные профиля
             return await response.json();
         } else {
             return null;
@@ -23,28 +22,36 @@ export const logoutUser = createAsyncThunk(
     'auth/logoutUser',
     async (_, { rejectWithValue }) => {
         try {
-            const csrfToken = document.cookie
-                .split('; ')
-                .find((row) => row.startsWith('csrftoken='))
-                ?.split('=')[1];
+            // 1. Извлекаем все куки браузера
+            const cookies = document.cookie.split('; ');
+            
+            // 2. Ищем куку, которая начинается с "csrftoken="
+            const csrfCookie = cookies.find((row) => row.startsWith('csrftoken='));
+            
+            // 3. Забираем значение токена (после знака "=")
+            const csrfToken = csrfCookie ? csrfCookie.split('=')[1] : null;
 
+            // Если пользователь долго сидел на сайте и кука удалилась, выбрасываем ошибку
             if (!csrfToken) {
-                throw new Error('CSRF token not found');
+                throw new Error('CSRF-токен не найден. Пожалуйста, обновите страницу.');
             }
 
-            const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/logout/`, {
+            // 4. Отправляем POST-запрос с токеном в заголовках
+            const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/logout/`, {
                 method: 'POST',
-                credentials: 'include',
+                credentials: 'include', // Обязательно: передает сессионную куку Django (sessionid)
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken,
+                    'X-CSRFToken': csrfToken, // <-- ПЕРЕДАЕМ ТОКЕН ЗДЕСЬ
                 },
             });
 
             if (!response.ok) {
-                throw new Error('Ошибка при выходе из системы');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Ошибка при выходе из системы');
             }
-            return; // Успех
+            
+            return; // Успешное выполнение
         } catch (error) {
             return rejectWithValue(error.message);
         }
@@ -55,7 +62,6 @@ export const registerUser = createAsyncThunk(
     'auth/registerUser',
     async (userData, { rejectWithValue }) => {
         try {
-            // Получение CSRF-токена 
             const csrfResponse = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/register/`, {
                 method: 'GET',
                 credentials: 'include'
@@ -88,6 +94,7 @@ export const registerUser = createAsyncThunk(
             if (response.ok) {
                 return data;
             } else {
+                // Сервер возвращает ошибки валидации полей, например { username: ["Этот логин занят"] }
                 return rejectWithValue(data);
             }
         } catch (error) {
@@ -101,8 +108,8 @@ export const registerUser = createAsyncThunk(
 const initialState = {
     user: null,
     isAuthenticated: false,
-    status: 'idle',
-    error: '', 
+    loading: false, // Булевое значение для простой проверки в компонентах
+    error: '',       // Общая ошибка (например, ошибка сети)
 
     formData: {
         username: '',
@@ -110,31 +117,24 @@ const initialState = {
         password: '',
         password_confirm: '',
     },
-    validationErrors: {},
+    validationErrors: {}, // Ошибки конкретных полей
 };
 
 const authSlice = createSlice({
     name: 'auth',
     initialState,
     reducers: {
-        setFormField: {
-            reducer(state, action) {
-                state.formData = action.payload.formData;
-            },
-            prepare(field, value) {
-                return {
-                    payload: {
-                        formData: { [field]: value }
-                    }
-                };
-            }
+        setFormField: (state, action) => {
+            const { name, value } = action.payload;
+            state.formData[name] = value;
         },
-        setValidationError: (state, action) => {
+        updateAppError: (state, action) => {
             const { field, message } = action.payload;
-            state.validationErrors = { ...state.validationErrors, [field]: message };
-        },
-        clearValidationErrors: (state) => {
-            state.validationErrors = {};
+            if (field === 'general') {
+                state.error = message || '';
+            } else {
+                state.validationErrors[field] = message;
+            }
         },
         resetRegistrationForm: (state) => {
             state.formData = {
@@ -144,46 +144,50 @@ const authSlice = createSlice({
                 password_confirm: '',
             };
             state.validationErrors = {};
-        },
-        updateAppError: (state, action) => {
-            // Устанавливает общую ошибку приложения
-            state.error = action.payload;
+            state.error = '';
         },
         setLoading: (state, action) => {
-            // Устанавливает статус загрузки
-            state.status = action.payload ? 'loading' : 'idle';
-        },
-        setSubmitted: (state, action) => {
-            // Флаг сабмита формы (если используется)
-            state.isSubmitted = action.payload;
-        },
+            state.loading = action.payload;
+        }
     },
     extraReducers: (builder) => {
         builder
             .addCase(checkAuthStatus.pending, (state) => {
-                state.status = 'loading';
-                state.error = ''; // Очищаем ошибку при новой проверке
+                state.loading = true;
+                state.error = '';
             })
             .addCase(checkAuthStatus.fulfilled, (state, action) => {
-                state.status = 'succeeded';
-                state.user = action.payload; // Будет либо объект пользователя, либо null
+                state.loading = false;
+                state.user = action.payload;
                 state.isAuthenticated = !!action.payload;
             })
             .addCase(checkAuthStatus.rejected, (state, action) => {
-                state.status = 'failed';
+                state.loading = false;
                 state.error = typeof action.payload === 'string' ? action.payload : 'Неизвестная ошибка';
                 state.user = null;
                 state.isAuthenticated = false;
             })
             .addCase(logoutUser.rejected, (state, action) => {
-                state.status = 'failed';
                 state.error = action.payload || 'Ошибка при выходе из системы';
             })
+            // Обработка отправки формы регистрации через Thunk
+            .addCase(registerUser.pending, (state) => {
+                state.loading = true;
+                state.validationErrors = {};
+                state.error = '';
+            })
+            .addCase(registerUser.fulfilled, (state) => {
+                state.loading = false;
+                // Очищаем форму
+                state.formData = { username: '', email: '', password: '', password_confirm: '' };
+            })
             .addCase(registerUser.rejected, (state, action) => {
-                state.status = 'failed';
+                state.loading = false;
                 if (typeof action.payload === 'object') {
+                    // Если сервер прислал ошибки полей
                     state.validationErrors = action.payload;
                 } else {
+                    // Если произошла общая ошибка сети/сервера
                     state.error = action.payload || 'Произошла ошибка при регистрации';
                 }
             });
@@ -191,8 +195,10 @@ const authSlice = createSlice({
 });
 
 export const {
-    setFormField, setValidationError, clearValidationErrors, resetRegistrationForm,
-    updateAppError, setLoading
+    setFormField,
+    updateAppError,
+    resetRegistrationForm,
+    setLoading
 } = authSlice.actions;
 
 export default authSlice.reducer;

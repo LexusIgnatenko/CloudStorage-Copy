@@ -2,19 +2,17 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { useSelector, useDispatch } from 'react-redux';
 import {
-  fetchFiles,
-  uploadFile,
   deleteFile,
-  renameFile,
   downloadFile,
   copyLink,
   startRename,
   updateNewName,
   cancelRename,
-  fileRenamed,
-} from '../../features/fileStorage/fileStorageSlice.js'; // Корректный путь к вашему slice
+  renameFile,
+} from '../../features/fileStorage/fileStorageSlice.js';
+import './FileList.css'; // Убедитесь, что стили подключены
 
-// Вспомогательные функции остаются без изменений
+// Вспомогательные функции
 const formatDate = (dateString) => {
   if (!dateString) return 'Не скачивался';
   return new Date(dateString).toLocaleString('ru-RU');
@@ -28,30 +26,31 @@ const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-const FileList = ({ isAdmin }) => { // props теперь только isAdmin, файлы берём из стора
+const FileList = ({ isAdmin }) => {
   const dispatch = useDispatch();
 
   // Выбираем нужные данные из стора
-  const files = useSelector((state) => state.fileStorage.files);
+  const files = useSelector((state) => state.fileStorage.files || []);
   const status = useSelector((state) => state.fileStorage.status);
   const error = useSelector((state) => state.fileStorage.error);
-
   const editingFileId = useSelector((state) => state.fileStorage.editingFileId);
   const newFileName = useSelector((state) => state.fileStorage.newName);
 
-  // Обработчики кликов - они только диспатчат действия
-
+  // Обработчики кликов
   const handleDownloadClick = (file) => {
-    dispatch(downloadFile({ fileId: file.id }));
+    dispatch(downloadFile({
+      fileId: file.id,
+      originalName: file.original_name
+    }));
   };
 
   const handleCopyLinkClick = (file) => {
-    dispatch(copyLink({ fileId: file.id }));
+    dispatch(copyLink(file.id));
   };
 
   const handleDeleteClick = (file) => {
-    if (window.confirm('Вы уверены, что хотите удалить файл?')) {
-      dispatch(deleteFile({ fileId: file.id }));
+    if (window.confirm(`Вы уверены, что хотите удалить файл "${file.original_name}"?`)) {
+      dispatch(deleteFile(file.id));
     }
   };
 
@@ -60,26 +59,17 @@ const FileList = ({ isAdmin }) => { // props теперь только isAdmin, 
   };
 
   const handleSubmitRename = () => {
-// Здесь должна быть логика вызова API для переименования.
-// После успешного ответа API нужно вызвать:
-// dispatch(fileRenamed({ fileId: editingFileId, newName: newNameValue }));
-    // Для демонстрации просто отменим редактирование:
-    dispatch(cancelRename());
+    if (!newFileName || !newFileName.trim) {
+      alert('Имя файла не может быть пустым');
+      return;
+    }
 
-    // В реальном приложении здесь будет:
-    // fetch(...)
-    // .then(() => dispatch(fileRenamed({ ... })))
-    // .catch(() => /* обработка ошибки */)
-
-    console.log('Переименование файла:', editingFileId, 'в', newName);
-
-    // *** ВАЖНО *** В реальном коде здесь должен быть вызов API!
-
-    // После успешного API вызова:
-    // dispatch(fileRenamed({ fileId: editingFileId, newName: newNameValue }));
-
-    // Для этого примера просто отменим:
-    dispatch(cancelRename());
+    // Диспатчим экшен переименования, передавая ID редактируемого файла 
+    // и ту строку, которую пользователь ввел в инпут (newFileName)
+    dispatch(renameFile({
+      fileId: editingFileId,
+      newName: newFileName
+    }));
   };
 
   const handleCancelRename = () => {
@@ -90,8 +80,8 @@ const FileList = ({ isAdmin }) => { // props теперь только isAdmin, 
     dispatch(updateNewName(e.target.value));
   };
 
-  if (status === 'loading') return <div>Загрузка...</div>;
-  if (status === 'failed') return <div>Ошибка: {error}</div>;
+  if (status === 'loading') return <div className="loading-status">Загрузка...</div>;
+  if (status === 'failed') return <div className="error-status">Ошибка: {error}</div>;
 
   return (
     <div className="file-list">
@@ -115,7 +105,8 @@ const FileList = ({ isAdmin }) => { // props теперь только isAdmin, 
                   <div className="rename-controls">
                     <input
                       type="text"
-                      value={newName}
+                      //  ИСПРАВЛЕНО: Связываем инпут с правильным стейтом newFileName
+                      value={newFileName || ''}
                       onChange={handleInputChange}
                       className="rename-input"
                     />
@@ -132,7 +123,7 @@ const FileList = ({ isAdmin }) => { // props теперь только isAdmin, 
               </td>
               <td>{file.comment || '-'}</td>
               <td>{formatFileSize(file.size)}</td>
-              <td>{file.owner_username}</td>
+              <td>{file.owner_username || 'Неизвестно'}</td>
               <td>{formatDate(file.upload_date)}</td>
               <td>{formatDate(file.last_download)}</td>
               <td>
@@ -140,6 +131,8 @@ const FileList = ({ isAdmin }) => { // props теперь только isAdmin, 
                   <button onClick={() => handleDownloadClick(file)} className="action-button download">
                     Скачать
                   </button>
+
+                  {/* Проверка прав: Кнопки видны админу ИЛИ владельцу файла */}
                   {(isAdmin || file.is_owner) && (
                     <>
                       <button onClick={() => handleRenameClick(file)} className="action-button rename">
@@ -150,6 +143,7 @@ const FileList = ({ isAdmin }) => { // props теперь только isAdmin, 
                       </button>
                     </>
                   )}
+
                   <button onClick={() => handleCopyLinkClick(file)} className="action-button copy">
                     Копировать ссылку
                   </button>

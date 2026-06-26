@@ -30,6 +30,8 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = bool(os.getenv('DEBUG', '').lower() == 'true')
+# DEBUG = bool(os.getenv('DEBUG', '').lower() == 'false')
+# DEBUG = False
 ALLOWED_HOSTS = ['*']
 # ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS').split(',') if os.getenv('ALLOWED_HOSTS') else []
 
@@ -45,8 +47,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
-    # 'corsheaders',
-    'corsheaders.apps.CorsHeadersConfig',
+    'django_vite',
+    'corsheaders.apps.CorsHeadersAppConfig',
     'myapp',
 ]
 
@@ -65,12 +67,12 @@ MIDDLEWARE = [
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    # "http://localhost:5173",
-    # "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://194.67.66.92",
-    "http://194.67.66.92:8000",
+    # "http://194.67.66.92",
+    # "http://194.67.66.92:8000",
 ]
 
 CORS_ALLOW_METHODS = [
@@ -100,8 +102,8 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://194.67.66.92",
-    "http://194.67.66.92:8000",
+    # "http://194.67.66.92",
+    # "http://194.67.66.92:8000",
 ]
 
 # Дополнительные настройки безопасности
@@ -163,22 +165,6 @@ TEMPLATES = [
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
-    # 'default': {
-    #     'ENGINE': 'django.db.backends.postgresql_psycopg2',
-    #     'NAME': 'cloudstorage',
-    #     'USER': 'new_user_name',
-    #     'PASSWORD': 'new_password',
-    #     'HOST': 'localhost',
-    #     'PORT': '',
-    # },
-    #  'default': {
-    #     'ENGINE': 'django.db.backends.postgresql',
-    #     'NAME': 'cloudstorage',
-    #     'USER': 'lexus',
-    #     'PASSWORD': 'Leschiy885',
-    #     'HOST': 'localhost',
-    #     'PORT': '5432',
-    # },
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME':  os.getenv('DB_NAME'),
@@ -262,6 +248,8 @@ FILE_UPLOAD_PERMISSIONS = 0o644
 CORS_EXPOSE_HEADERS = [
     "Content-Type",
     "X-CSRFToken",
+    # "сontent-disposition",
+    'content-disposition',
 ]
 
 LOGGING = {
@@ -283,5 +271,14 @@ LOGGING = {
             'handlers': ['console'],
             'level': 'DEBUG',
         }
+    }
+}
+
+DJANGO_VITE = {
+    "default": {
+        "dev_mode": True,  # Обязательно True для локальной разработки!
+        "dev_server_host": "127.0.0.1",
+        "dev_server_port": 5173,
+        "manifest_path": BASE_DIR / "static" / "manifest.json", # Путь к будущему манифесту
     }
 }

@@ -4,11 +4,46 @@ from .models import CustomUser, FileStorage
 from .validators import validate_password
 
 
+# class UserProfileSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = CustomUser
+#         fields = ['id', 'username', 'email', 'is_admin']
+#         read_only_fields = ('username',)
+
+#     def validate_email(self, value):
+#         user = self.context['request'].user
+#         if CustomUser.objects.exclude(pk=user.pk).filter(email=value).exists():
+#             raise serializers.ValidationError("Этот email уже используется!")
+#         return value
+
+#     def validate_username(self, value):
+#         user = self.context['request'].user
+#         if CustomUser.objects.exclude(pk=user.pk).filter(username=value).exists():
+#             raise serializers.ValidationError("Это имя пользователя уже занято.")
+#         return value
+
 class UserProfileSerializer(serializers.ModelSerializer):
+    # Добавляем динамические поля для подсчета памяти
+    used_space = serializers.SerializerMethodField()
+    storage_limit = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'is_admin']
+        # Добавляем fields новые поля используемые на фронтенде в Navbar
+        fields = ['id', 'username', 'email', 'is_admin', 'used_space', 'storage_limit']
         read_only_fields = ('username',)
+
+    # Метод считает суммарный размер всех файлов текущего пользователя
+    def get_used_space(self, obj):
+        # На бэкенде суммируем поле size всех записей FileStorage для данного юзера
+        return sum(f.size for f in FileStorage.objects.filter(owner=obj))
+
+    # Метод возвращает лимит пользователя
+    def get_storage_limit(self, obj):
+        # Если в вашей модели CustomUser есть реальное поле (например, storage_limit или max_size), 
+        # верните его: return obj.storage_limit
+        # Если его пока нет, возвращаем фиксированный дефолтный лимит, например, 100 МБ в байтах:
+        return getattr(obj, 'storage_limit', 100 * 1024 * 1024)
 
     def validate_email(self, value):
         user = self.context['request'].user
@@ -21,7 +56,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
         if CustomUser.objects.exclude(pk=user.pk).filter(username=value).exists():
             raise serializers.ValidationError("Это имя пользователя уже занято.")
         return value
-
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     current_password = serializers.CharField(write_only=True, required=False)
@@ -87,17 +121,6 @@ class LoginSerializer(serializers.Serializer):
         # Если пользователь найден, сохраняем его в validated_data
         data['user'] = user
         return data
-    
-# class LoginSerializer(serializers.Serializer):
-#     username = serializers.CharField()
-#     password = serializers.CharField(write_only=True)
-
-#     def validate(self, data):
-#         user = authenticate(username=data['username'], password=data['password'])
-#         if not user:
-#             raise serializers.ValidationError('Неверные данные')
-#         return {'user': user}
-
 
 class FileStorageSerializer(serializers.ModelSerializer):
     owner_username = serializers.CharField(source='owner.username', read_only=True)

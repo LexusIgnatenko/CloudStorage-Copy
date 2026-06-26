@@ -24,11 +24,12 @@
 }
 
 .nav-link {
-  color: #666;
+  color: #0bf33d;
   text-decoration: none;
   padding: 0.5rem 1rem;
   border-radius: 4px;
   transition: background-color 0.2s;
+  background-color: #e3f2fd;
 }
 
 .nav-link:hover {
@@ -64,3 +65,48 @@
 .nav-button:hover {
   background-color: #c82333;
 } 
+
+/* Добавьте эти стили в конец вашего файла Navbar.css */
+
+.navbar-storage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 0 20px;
+  min-width: 200px;
+}
+
+.storage-text {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.storage-progressbar-container {
+  width: 100%;
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.storage-progressbar-fill {
+  height: 100%;
+  background-color: #4caf50;
+  /* Зеленый по умолчанию */
+  border-radius: 4px;
+  transition: width 0.4s ease-in-out, background-color 0.3s ease;
+}
+
+/* Цвет становится оранжевым, если диск заполнен более чем на 75% */
+.storage-progressbar-fill.warning {
+  background-color: #ff9800;
+}
+
+/* Цвет становится красным, если диск заполнен более чем на 90% */
+.storage-progressbar-fill.danger {
+  background-color: #f44336;
+}

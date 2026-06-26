@@ -1,3 +1,4 @@
+import os
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated, BasePermission
@@ -29,9 +30,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def index(request):
-    return render(request, 'index.html')
-
 class IsOwnerOrAdmin(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated)
@@ -42,9 +40,8 @@ class IsOwnerOrAdmin(BasePermission):
             obj.owner == request.user
         )
 
-
 class UserProfileView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         serializer = UserProfileSerializer(request.user)
@@ -57,15 +54,13 @@ class UserProfileView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-# @method_decorator(ensure_csrf_cookie, name='dispatch')
+@method_decorator(ensure_csrf_cookie, name='dispatch')
 class RegisterView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = (AllowAny,)
 
     def get(self, request):
         return Response({'detail': 'CSRF cookie set'})
 
-    @method_decorator(csrf_protect)
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
@@ -76,60 +71,72 @@ class RegisterView(APIView):
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    Response({'error': 'Ошибка обработки данных.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+@method_decorator(ensure_csrf_cookie, name='dispatch')
 class LoginView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = (AllowAny,)
 
     def get(self, request):
-        # Этот метод нужен только для установки CSRF-койки фронтендом
+        # Теперь этот метод гарантированно установит куку csrftoken на фронтенде
         return Response({'detail': 'CSRF cookie set'})
 
-    @method_decorator(csrf_protect)
+    # DRF автоматически проверяет CSRF для сессионной аутентификации.
     def post(self, request):
         """
         Аутентификация пользователя по username/password.
         Использует LoginSerializer для валидации.
         """
+        print("--- DEBUG: Входящий запрос на логин ---")
+        print(f"Тело запроса (request.data): {request.data}")
+
+        # Проверяем, пришел ли токен вообще на бэкенд (для отладки в консоли)
+        print(f"CSRF заголовок из браузера: {request.META.get('HTTP_X_CSRFTOKEN')}")
+        print(f"CSRF кука в запросе: {request.COOKIES.get('csrftoken')}")
+
         serializer = LoginSerializer(data=request.data, context={'request': request})
         
-        # Метод is_valid(True) автоматически вызовет исключение,
-        # если данные неверны, и вернет правильный статус ошибки (например, 400).
-        # Если данные валидны, он просто продолжит выполнение.
-        serializer.is_valid(raise_exception=True) 
-
-        # Если мы дошли до этой строки, значит пользователь успешно прошел проверку.
-        user = serializer.validated_data['user']
-        login(request, user)
-
-        return Response({
-            'user_id': user.id,
-            'username': user.username,
-            'is_admin': user.is_admin
-        })
-
-    @api_view(['POST'])
-    @permission_classes([IsAuthenticated])
-    @ensure_csrf_cookie
-    def logout_view(request):
         try:
-            logout(request)
-            return Response({'message': 'Успешный выход из системы'})
-        except Exception as e:
-            logger.info(f"Успешный выход из системы: {str(e)}")
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            serializer.is_valid(raise_exception=True) 
 
+            user = serializer.validated_data.get('user')
+            
+            if not user:
+                return Response({'error': 'Неверные учетные данные.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+            login(request, user)
+
+            print(f"--- DEBUG: Пользователь {user.username} успешно вошел ---")
+
+            return Response({
+                'user_id': user.id,
+                'username': user.username,
+                'is_admin': user.is_admin
+            })
+
+        except Exception as e:
+            # Если сериализатор выкинул ошибку валидации (например, ValidationError от DRF)
+            if hasattr(e, 'detail'):
+                return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+                
+            import traceback
+            print("--- DEBUG: Неожиданная ошибка при логине ---")
+            print(f"Тип ошибки: {type(e)}")
+            print(f"Сообщение: {e}")
+            traceback.print_exc()
+
+            return Response(
+                {'error': 'Произошла внутренняя ошибка сервера.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class IsAdminUser(BasePermission):
 
     def has_permission(self, request, view):
         return request.user and request.user.is_authenticated and request.user.is_admin
 
-
 class AdminUserViewSet(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = AdminUserSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = (IsAdminUser,)
 
     def list(self, request):
         try:
@@ -180,10 +187,19 @@ class AdminUserViewSet(viewsets.ModelViewSet):
                 {'error': f'Ошибка при получении информации о хранилище: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
+    # Переопределяем метод удаления, чтобы зачистить физический диск сервера
+    def perform_destroy(self, instance):
+        # Находим все файлы, принадлежащие удаляемому пользователю
+        user_files = FileStorage.objects.filter(owner=instance)
+        for f in user_files:
+            if f.file and default_storage.exists(f.file.name):
+                default_storage.delete(f.file.name) # Стираем файлы из media/
+        
+        # Стираем самого пользователя из базы
+        instance.delete()
+        
 class FileListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         # Проверяем, если в запросе указан user_id и текущий пользователь - админ
@@ -206,9 +222,8 @@ class FileListView(APIView):
         serializer = FileStorageSerializer(files, many=True, context={'request': request})
         return Response(serializer.data)
 
-
 class FileUploadView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         try:
@@ -239,9 +254,8 @@ class FileUploadView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class FileDetailView(APIView):
-    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+    permission_classes = (IsAuthenticated, IsOwnerOrAdmin)
 
     def get_object(self, pk):
         return FileStorage.objects.get(pk=pk)
@@ -250,40 +264,111 @@ class FileDetailView(APIView):
         file_storage = self.get_object(pk)
         serializer = FileStorageSerializer(file_storage, context={'request': request})
         return Response(serializer.data)
+    
+    def patch(self, request, pk):
+        try:
+            # Находим файл в базе данных по его UUID
+            file_obj = get_object_or_404(FileStorage, pk=pk)
+            
+            # Проверяем права доступа (владелец или админ)
+            self.check_object_permissions(request, file_obj)
+
+            # Получаем новое имя из тела JSON-запроса фронтенда
+            new_name = request.data.get('name')
+
+            if not new_name or not new_name.strip():
+                return Response(
+                    {'error': 'Имя файла не может быть пустым'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # 1. Сохраняем расширение старого файла, чтобы пользователь случайно его не затер
+            # (Например, если файл был "отчет.pdf", а пользователь написал "отчет_новый")
+            _, ext = os.path.splitext(file_obj.original_name)
+            
+            # Если пользователь сам не указал расширение, принудительно возвращаем его
+            if not new_name.endswith(ext):
+                new_name = new_name.strip() + ext
+            else:
+                new_name = new_name.strip()
+
+            # 2. Обновляем имя в базе данных
+            file_obj.original_name = new_name
+            file_obj.save()
+
+            return Response({
+                'message': 'Файл успешно переименован',
+                'id': file_obj.id,
+                'original_name': file_obj.original_name
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Ошибка при переименовании файла {pk}: {str(e)}")
+            return Response(
+                {'error': f'Не удалось переименовать файл: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def delete(self, request, pk):
-        file_storage = self.get_object(pk)
-        file_storage.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        try:
+            # Находим файл в базе данных
+            file_obj = get_object_or_404(FileStorage, pk=pk)
+            
+            # Проверяем права через кастомный класс (вызывается вручную для APIView)
+            self.check_object_permissions(request, file_obj)
+            
+            # 1. Удаляем физический файл с жесткого диска/хранилища Django
+            if file_obj.file and default_storage.exists(file_obj.file.name):
+                default_storage.delete(file_obj.file.name)
+            
+            # 2. Удаляем запись из базы данных
+            file_obj.delete()
+            
+            # Возвращаем информацию об успехе. Бэкенд автоматически 
+            # пересчитает место при следующем запросе профиля/хранилища
+            return Response(
+                {'message': 'Файл успешно удален', 'status': 'success'}, 
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(f"Ошибка при удалении файла {pk}: {str(e)}")
+            return Response(
+                {'error': f'Не удалось удалить файл: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class FileDownloadView(APIView):
-    permission_classes = [IsAuthenticated, IsOwnerOrAdmin] 
-
-    def get_object(self, pk):
-        return get_object_or_404(FileStorage, pk=pk)
+    permission_classes = (IsAuthenticated, IsOwnerOrAdmin)
 
     def get(self, request, pk):
-        file_storage = self.get_object(pk)
-        file_storage.update_last_download()
+        # Находим файл в базе данных по его UUID
+        file_obj = get_object_or_404(FileStorage, pk=pk)
         
-        # Проверяем наличие параметра preview
-        is_preview = request.query_params.get('preview', None)
+        # Проверяем права доступа к объекту
+        self.check_object_permissions(request, file_obj)
+
+        # Проверяем, существует ли физический файл на диске
+        if not file_obj.file or not os.path.exists(file_obj.file.path):
+            return Response(
+                {'error': 'Файл физически отсутствует на сервере'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Фиксируем время последнего скачивания
+        file_obj.last_download = timezone.now()
+        file_obj.save()
+
+        # Открываем файл в бинарном режиме для чтения (rb)
+        response = FileResponse(open(file_obj.file.path, 'rb'), as_attachment=True)
         
-        # Готовим файл для отправки
-        full_path = file_storage.file.path
-        content_type, _ = mimetypes.guess_type(full_path)
+        # Передаем оригинальное имя файла фронтенду в заголовках ответа
+        response['Content-Disposition'] = f'attachment; filename="{file_obj.original_name}"'
         
-        if is_preview:
-            # Вернуть файл для просмотра в браузере
-            return FileResponse(open(full_path, 'rb'), content_type=content_type)
-        else:
-            # Вернуть файл для скачивания
-            response = FileResponse(open(full_path, 'rb'), content_type=content_type)
-            response['Content-Disposition'] = f'attachment; filename="{file_storage.original_name}"'
-            return response
+        return response
 
 class FileShareView(APIView):
-    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+    permission_classes = (IsAuthenticated, IsOwnerOrAdmin)
     renderer_classes = [JSONRenderer]  # Явно указываем, что возвращаем только JSON
 
     def get_object(self, pk):
@@ -318,7 +403,7 @@ class FileShareView(APIView):
             )
 
 class FileRenameView(APIView):
-    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+    permission_classes = (IsAuthenticated, IsOwnerOrAdmin)
 
     def get_object(self, pk):
         return FileStorage.objects.get(pk=pk)
@@ -339,97 +424,75 @@ class FileRenameView(APIView):
         serializer = FileStorageSerializer(file_storage, context={'request': request})
         return Response(serializer.data)
 
+# class SharedFileView(APIView):
+#     permission_classes = (AllowAny,)
+
+#     def get(self, request, share_link):
+#         try:
+#             # Преобразуем share_link из строки в UUID
+#             share_link_uuid = uuid.UUID(str(share_link))
+            
+#             file_storage = FileStorage.objects.get(share_link=share_link_uuid)
+            
+#             if file_storage.share_link_expiry and file_storage.share_link_expiry < timezone.now():
+#                 return Response({'error': 'Ссылка истекла'}, status=400)
+
+#             # Обновляем только дату последнего скачивания
+#             file_storage.last_download = timezone.now()
+#             file_storage.save(update_fields=['last_download'])
+
+#             response = FileResponse(file_storage.file, as_attachment=False)
+#             response['Content-Disposition'] = f'inline; filename="{file_storage.original_name}"'
+#             return response
+#         except FileStorage.DoesNotExist:
+#             return Response({'error': 'Файл не найден'}, status=404)
+#         except ValueError as e:
+#             return Response({'error': 'Неверный формат ссылки'}, status=400)
+#         except Exception as e:
+#             return Response({'error': str(e)}, status=500) 
+
+@api_view(['POST']) # Обязательно ПЕРВЫЙ декоратор
+@permission_classes([IsAuthenticated]) # Исправлено: в DRF классы передаются списком []
+@csrf_protect # Защищает метод POST от CSRF-атак
+def logout_view(request):
+    try:
+        logout(request)
+        return Response({'message': 'Успешный выход из системы'}, status=status.HTTP_200_OK)
+    except Exception as e:
+        # Исправлен лог на ошибку
+        logger.error(f"Ошибка при выходе из системы: {str(e)}")
+        return Response({'error': 'Не удалось выйти из системы'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class SharedFileView(APIView):
-    permission_classes = [AllowAny]
+    # ВАЖНО: Разрешаем доступ ВСЕМ пользователям, даже неавторизованным
+    permission_classes = (AllowAny,) 
 
-    def get(self, request, share_link):
-        try:
-            # Преобразуем share_link из строки в UUID
-            share_link_uuid = uuid.UUID(str(share_link))
-            
-            file_storage = FileStorage.objects.get(share_link=share_link_uuid)
-            
-            if file_storage.share_link_expiry and file_storage.share_link_expiry < timezone.now():
-                return Response({'error': 'Ссылка истекла'}, status=400)
+    def get(self, request, pk):
+        # Находим файл по его уникальному UUID
+        file_obj = get_object_or_404(FileStorage, pk=pk)
 
-            # Обновляем только дату последнего скачивания
-            file_storage.last_download = timezone.now()
-            file_storage.save(update_fields=['last_download'])
+        # Проверяем физическое наличие файла на диске
+        if not file_obj.file or not os.path.exists(file_obj.file.path):
+            return Response(
+                {'error': 'Файл физически отсутствует на сервере'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-            response = FileResponse(file_storage.file, as_attachment=False)
-            response['Content-Disposition'] = f'inline; filename="{file_storage.original_name}"'
-            return response
-        except FileStorage.DoesNotExist:
-            return Response({'error': 'Файл не найден'}, status=404)
-        except ValueError as e:
-            return Response({'error': 'Неверный формат ссылки'}, status=400)
-        except Exception as e:
-            return Response({'error': str(e)}, status=500) 
-        
+        # Фиксируем время последнего скачивания
+        file_obj.last_download = timezone.now()
+        file_obj.save()
 
-# @method_decorator(ensure_csrf_cookie, name='dispatch')
-# class LoginView(APIView):
-#     permission_classes = [AllowAny]
+        # Отдаем файл как бинарное вложение
+        response = FileResponse(open(file_obj.file.path, 'rb'), as_attachment=True)
+        response['Content-Disposition'] = f'attachment; filename="{file_obj.original_name}"'
+        return response
 
-#     def get(self, request):
-#         # Установка CSRF-токена в cookie
-#         response = Response({'detail': 'CSRF cookie set'})
-#         response['X-CSRFToken'] = request.META.get('CSRF_COOKIE', '')
-#         return response
-
-#     @method_decorator(csrf_protect)
-#     def post(self, request):
-#         try:
-#             serializer = LoginSerializer(data=request.data)
-#             if serializer.is_valid():
-#                 user = serializer.validated_data['user']
-#                 login(request, user)
-#                 response = Response({
-#                     'user_id': user.id,
-#                     'username': user.username,
-#                     'is_admin': user.is_admin
-#                 })
-#                 # Обновляем CSRF токен в ответе
-#                 response['X-CSRFToken'] = request.META.get('CSRF_COOKIE', '')
-#                 return response
-#             return Response({
-#                 'error': 'Неверное имя пользователя или пароль'
-#             }, status=status.HTTP_401_UNAUTHORIZED)
-#         except Exception as e:
-#             logger.error(f"Ошибка при авторизации: {str(e)}")
-#             return Response({
-#                 'error': str(e)
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)       
-
-
-# class LoginView(APIView):
-#     permission_classes = [AllowAny]
-
-#     def get(self, request):
-#         # Установка CSRF-токена в cookie
-#         response = Response({'detail': 'CSRF cookie set'})
-#         return response
-
-#     @method_decorator(csrf_protect)
-#     def post(self, request):
-#         # Используем сериализатор для валидации
-#         serializer = LoginSerializer(data=request.data)
-
-#         # Проверяем, валидны ли данные (например, все ли поля на месте)
-#         if not serializer.is_valid():
-#             # Если данные невалидны, возвращаем 400 Bad Request с подробностями
-#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-#         # Если данные валидны, пытаемся аутентифицировать пользователя
-#         try:
-#             user = serializer.validated_data['user']
-#             login(request, user)
-#             return Response({
-#                 'user_id': user.id,
-#                 'username': user.username,
-#                 'is_admin': user.is_admin
-#             })
-#         except KeyError:
-#             # На случай, если в сериализаторе что-то пошло не так
-#             return
+def index(request):
+    # Если мы разрабатываем проект локально (DEBUG = True)
+    if settings.DEBUG:
+        # Принудительно отдаем наш уникальный шаблон разработки,
+        # передавая флаг 'debug': True в контекст страницы
+        return render(request, 'vite_dev.html', {'debug': True})
+    
+    # В продакшене (DEBUG = False) отдаем стандартный собранный index.html
+    return render(request, 'index.html', {'debug': False})

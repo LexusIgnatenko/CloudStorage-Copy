@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  {% load static %}
+  <link rel="icon" type="image/svg+xml" href="{% static 'vite.svg' %}" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vite + React + Django</title>
+
+    {% if debug %}
+    <!-- РЕЖИМ РАЗРАБОТКИ: Перенесли адреса в JS-строки, чтобы автоформат их не ломал -->
+    <script type="module">
+      const viteHost = "http://127.0.0.1:5173";
+      
+      // Загружаем @react-refresh динамически через безопасную JS-строку
+      import(viteHost + '/@react-refresh').then((mod) => {
+        mod.injectIntoGlobalHook(window);
+        window.$RefreshReg$ = () => {};
+        window.$RefreshSig$ = () => (type) => type;
+        
+        // Внедряем клиент Vite
+        const clientScript = document.createElement('script');
+        clientScript.type = 'module';
+        clientScript.src = viteHost + '/@vite/client';
+        document.head.appendChild(clientScript);
+
+        // Внедряем главную точку входа React
+        const mainScript = document.createElement('script');
+        mainScript.type = 'module';
+        mainScript.src = viteHost + '/src/main.jsx';
+        document.head.appendChild(mainScript);
+      });
+    </script>
+  {% else %}
+    <!-- ПРОДАКШЕН -->
+    {% load django_vite %}
+    {% vite_hmr_client %}
+    {% vite_asset 'src/main.jsx' %} 
+  {% endif %}
+</head>
+
+<body>
+  <div id="root"></div>
+</body>
+</html>

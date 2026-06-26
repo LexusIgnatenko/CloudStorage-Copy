@@ -1,22 +1,29 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import { Toaster } from 'react-hot-toast'; //  ДОБАВЛЕН ИМПОРТ (Решает ошибку Toaster is not defined)
 import FileList from '../components/FileStorage/FileList';
 import FileUpload from '../components/FileStorage/FileUpload';
 import Navbar from '../components/Navigation/Navbar';
 import './Dashboard.css';
-import { useDispatch, useSelector } from 'react-redux';
-import { fetchFiles, clearSuccessMessage, clearError } from '../features/fileStorage/fileStorageSlice';
+import { fetchFiles, clearSuccessMessage, clearError, uploadFile } from '../features/fileStorage/fileStorageSlice';
+import { logoutUser } from '../features/auth/authSlice'; //  ДОБАВЛЕН импорт thunk-экшена для правильного выхода
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const dispatch = useDispatch();
 
-  // Получаем данные из Redux-стора
-  const { files, status, error, successMessage, isAdmin } = useSelector((state) => state.fileStorage);
+  // Получаем данные о файлах из fileStorage
+  const { files, status, error, successMessage } = useSelector((state) => state.fileStorage);
+
+  //  ИСПРАВЛЕНО: Извлекаем информацию об админе из authSlice, где хранятся данные залогиненного юзера
+  const user = useSelector((state) => state.auth.user);
+  const isAdmin = user?.is_admin || false;
 
   const userIdFromQuery = searchParams.get('user');
 
+  // Загрузка списка файлов
   useEffect(() => {
     if (userIdFromQuery) {
       dispatch(fetchFiles({ userId: userIdFromQuery }));
@@ -25,7 +32,7 @@ const Dashboard = () => {
     }
   }, [dispatch, userIdFromQuery]);
 
-  // Очищаем сообщения об успехе/ошибке при их показе
+  // Очищаем сообщения об успехе по таймеру
   useEffect(() => {
     if (successMessage) {
       const timer = setTimeout(() => {
@@ -35,6 +42,7 @@ const Dashboard = () => {
     }
   }, [successMessage, dispatch]);
 
+  // Очищаем сообщения об ошибке по таймеру
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => {
@@ -44,18 +52,29 @@ const Dashboard = () => {
     }
   }, [error, dispatch]);
 
+  //  ИСПРАВЛЕНО: Перевели выход на созданный ранее Thunk, чтобы правильно обрабатывать сессии и CSRF
   const handleLogout = async () => {
-    try {
-      await fetch(`${import.meta.env.VITE_SERVER_URL}/api/logout/`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+    const resultAction = await dispatch(logoutUser());
+    if (logoutUser.fulfilled.match(resultAction)) {
       navigate('/login');
-    } catch (error) {
-      console.error('Ошибка при выходе:', error);
+    }
+  };
+
+  const handleUploadSuccess = async (file, comment) => {
+    // 1. Отправляем файл на сервер и ЖДЁМ окончания загрузки через unwrap()
+    try {
+      await dispatch(uploadFile({ file, comment })).unwrap();
+
+      // 2. После успешной загрузки принудительно обновляем список файлов на экране
+      if (userIdFromQuery) {
+        // Если это админ в личном кабинете юзера
+        dispatch(fetchFiles({ userId: userIdFromQuery }));
+      } else {
+        // Если это обычный пользователь в своем кабинете
+        dispatch(fetchFiles());
+      }
+    } catch (err) {
+      console.error("Не удалось обновить список файлов:", err);
     }
   };
 
@@ -64,7 +83,7 @@ const Dashboard = () => {
       <Navbar onLogout={handleLogout} />
       <div className="dashboard-content">
         <div className="main-content">
-          <h2>Файловое хранилище</h2>
+          <h2>Твои файлы</h2>
 
           {/* Отображаем сообщения из стора */}
           {error && (
@@ -78,8 +97,10 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Не показываем форму загрузки, если админ просматривает чужие файлы */}
-          {(!userIdFromQuery || !isAdmin) && <FileUpload />}
+          {/*  Передан обязательный проп onUpload */}
+          {(!userIdFromQuery || !isAdmin) && (
+            <FileUpload onUpload={handleUploadSuccess} />
+          )}
 
           {isAdmin && userIdFromQuery && (
             <div className="admin-controls">
@@ -89,8 +110,8 @@ const Dashboard = () => {
             </div>
           )}
 
-          {/* Передаем статус загрузки для отображения индикатора */}
-          <FileList files={files} status={status} />
+          {/*  Передан обязательный проп isAdmin */}
+          <FileList files={files} status={status} isAdmin={isAdmin} />
         </div>
       </div>
       <Toaster position="top-right" />

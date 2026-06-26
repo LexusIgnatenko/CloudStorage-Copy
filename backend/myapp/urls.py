@@ -27,7 +27,8 @@ urlpatterns = [
     path('files/<uuid:pk>/rename/', FileRenameView.as_view(), name='file-rename'),
     
     # Общий доступ к файлам - обновляем путь
-    path('shared/<uuid:share_link>/', SharedFileView.as_view(), name='shared-file'),
+    path('shared/<uuid:pk>/', SharedFileView.as_view(), name='shared-file'),
+    # path('shared/<uuid:share_link>/', SharedFileView.as_view(), name='shared-file'),
     
     # Административный интерфейс
     path('', include(router.urls)),
