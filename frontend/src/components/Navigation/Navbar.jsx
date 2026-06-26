@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { logoutUser } from '../../features/auth/authSlice';
 import './Navbar.css';
@@ -25,6 +25,7 @@ const formatStorageSize = (bytes) => {
 const Navbar = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const location = useLocation();
 
   const user = useSelector(selectUserData);
   const isAuthenticated = !!user;
@@ -46,6 +47,8 @@ const Navbar = () => {
     dispatch(logoutUser());
     navigate('/login');
   };
+
+  const isAtDashboard = location.pathname === '/dashboard';
 
   return (
     <nav className="navbar">
@@ -72,7 +75,11 @@ const Navbar = () => {
         {isAuthenticated ? (
           <>
             <span className="nav-username">Привет, {username}</span>
-            <Link to="/dashboard" className="nav-link">Хранилище</Link>
+
+            {(!isAtDashboard || isAdmin) && (
+              <Link to="/dashboard" className="nav-link">Хранилище</Link>
+            )}
+
             {isAdmin && (
               <Link to="/admin" className="nav-link admin">Управление пользователями</Link>
             )}

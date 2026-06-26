@@ -41,13 +41,24 @@ class IsOwnerOrAdmin(BasePermission):
         )
 
 class UserProfileView(APIView):
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
 
     def get(self, request):
-        serializer = UserProfileSerializer(request.user)
-        return Response(serializer.data)
-
+        # Если пользователь залогинен — отдаем его данные (статус 200)
+        if request.user and request.user.is_authenticated:
+            serializer = UserProfileSerializer(request.user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        # serializer = UserProfileSerializer(request.user)
+        # return Response(serializer.data)
+        #  ИСПРАВЛЕНО: Если это гость — отдаем пустой ответ со статусом 200 вместо 403!
+        return Response(None, status=status.HTTP_200_OK)
+    
     def put(self, request):
+        # Для редактирования профиля оставляем строгую проверку авторизации вручную
+        if not request.user or not request.user.is_authenticated:
+            return Response({'error': 'Авторизуйтесь'}, status=status.HTTP_401_UNAUTHORIZED)
+        
         serializer = UserUpdateSerializer(request.user, data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
@@ -487,7 +498,7 @@ class SharedFileView(APIView):
         response['Content-Disposition'] = f'attachment; filename="{file_obj.original_name}"'
         return response
 
-def index(request):
+def index(request, **kwargs):
     # Если мы разрабатываем проект локально (DEBUG = True)
     if settings.DEBUG:
         # Принудительно отдаем наш уникальный шаблон разработки,

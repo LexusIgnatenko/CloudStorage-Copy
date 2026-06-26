@@ -24,19 +24,19 @@ sudo apt install python3 python3-pip python3-venv nginx gunicorn postgresql post
 ```bash
 # Создание базы данных и пользователя
 sudo -u postgres psql
-CREATE DATABASE cloudstorage;
-CREATE USER clouduser WITH PASSWORD 'your_password';
-ALTER ROLE clouduser SET client_encoding TO 'utf-8';
-ALTER ROLE clouduser SET default_transaction_isolation TO 'read committed';
-ALTER ROLE clouduser SET timezone TO 'UTC';
-GRANT ALL PRIVILEGES ON DATABASE cloudstorage TO clouduser;
+CREATE DATABASE cloud_db;
+CREATE USER cloud_user WITH PASSWORD 'your_password';
+ALTER ROLE cloud_user SET client_encoding TO 'utf-8';
+ALTER ROLE cloud_user SET default_transaction_isolation TO 'read committed';
+ALTER ROLE cloud_user SET timezone TO 'UTC';
+GRANT ALL PRIVILEGES ON DATABASE cloud_db TO clouduser;
 \q
 ```
 
 ### 3. Настройка бекенда
 ```bash
 # Клонирование репозитория
-git clone https://github.com/LexusIgnatenko/CloudStorage.git
+git clone https://github.com/LexusIgnatenko/CloudStorage-Copy.git
 cd CloudStorage/backend
 
 # Создание виртуального окружения

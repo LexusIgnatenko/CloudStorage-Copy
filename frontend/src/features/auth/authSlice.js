@@ -129,12 +129,24 @@ const authSlice = createSlice({
             state.formData[name] = value;
         },
         updateAppError: (state, action) => {
-            const { field, message } = action.payload;
-            if (field === 'general') {
-                state.error = message || '';
+            // Если пришел объект с указанием конкретного поля (из handleChange или handleSubmit)
+            if (action.payload && typeof action.payload === 'object' && 'field' in action.payload) {
+                const { field, message } = action.payload;
+                if (field === 'general') {
+                    state.error = message || ''; // Общая ошибка над формой
+                } else {
+                    state.validationErrors[field] = message; // Ошибка конкретного инпута
+                }
             } else {
-                state.validationErrors[field] = message;
+                // Если пришла обычная строка ошибки (например, ошибка сети)
+                state.error = action.payload || '';
             }
+        },
+    
+        // Метод для полной очистки формы при заходе на страницу
+        clearAuthErrors: (state) => {
+            state.error = '';
+            state.validationErrors = {};
         },
         resetRegistrationForm: (state) => {
             state.formData = {
@@ -160,12 +172,23 @@ const authSlice = createSlice({
                 state.loading = false;
                 state.user = action.payload;
                 state.isAuthenticated = !!action.payload;
+                state.error = ''; // Очищаем ошибку при успешном ответе!
             })
             .addCase(checkAuthStatus.rejected, (state, action) => {
                 state.loading = false;
-                state.error = typeof action.payload === 'string' ? action.payload : 'Неизвестная ошибка';
                 state.user = null;
                 state.isAuthenticated = false;
+                if (action.payload === null || action.payload === undefined) {
+                    state.error = ''; // Страница остается чистой для гостей
+                } else {
+                    state.error = typeof action.payload === 'string' ? action.payload : '';
+                }
+            })
+            .addCase(logoutUser.fulfilled, (state) => {
+                state.loading = false;
+                state.user = null;
+                state.isAuthenticated = false;
+                state.error = '';
             })
             .addCase(logoutUser.rejected, (state, action) => {
                 state.error = action.payload || 'Ошибка при выходе из системы';
@@ -180,6 +203,8 @@ const authSlice = createSlice({
                 state.loading = false;
                 // Очищаем форму
                 state.formData = { username: '', email: '', password: '', password_confirm: '' };
+                state.error = '';
+                state.validationErrors = {};
             })
             .addCase(registerUser.rejected, (state, action) => {
                 state.loading = false;
@@ -197,6 +222,7 @@ const authSlice = createSlice({
 export const {
     setFormField,
     updateAppError,
+    clearAuthErrors,
     resetRegistrationForm,
     setLoading
 } = authSlice.actions;

@@ -117,6 +117,7 @@ const usersSlice = createSlice({
             .addCase(fetchUsers.fulfilled, (state, action) => {
                 state.items = action.payload;
                 state.loading = false;
+                state.error = null; // Очищаем прошлые ошибки при успехе
             })
             .addCase(fetchUsers.rejected, (state, action) => {
                 state.loading = false;
@@ -134,6 +135,7 @@ const usersSlice = createSlice({
                 // Иммутабельное обновление массива
                 state.items = state.items.filter(user => user.id !== action.payload);
                 state.successMessage = 'Пользователь успешно удален.';
+                state.error = null; // Очищаем прошлые ошибки при успехе
             })
             .addCase(deleteUser.rejected, (state, action) => {
                 state.loading = false;
