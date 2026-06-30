@@ -37,7 +37,6 @@ export const fetchFiles = createAsyncThunk(
             });
 
             if (!response.ok) {
-                // Если сервер вернул ошибку (например, 401 или 403), читаем её текст
                 const errorData = await response.json().catch(() => ({}));
                 throw new Error(errorData.error || 'Ошибка при загрузке файлов');
             }
@@ -264,58 +263,7 @@ const fileStorageSlice = createSlice({
             state.newName = '';
         },
     },
-    // extraReducers: (builder) => {
-    //     builder
-    //         .addCase(fetchFiles.pending, (state) => {
-    //             state.status = 'loading';
-    //             state.error = null;
-    //         })
-    //         .addCase(fetchFiles.fulfilled, (state, action) => {
-    //             state.status = 'succeeded';
-    //             state.files = action.payload;
-    //         })
-    //         .addCase(fetchFiles.rejected, (state, action) => {
-    //             state.status = 'failed';
-    //             state.error = action.payload || 'Неизвестная ошибка';
-    //         })
-    //         // Обработка других асинхронных операций
-    //         // .addMatcher(
-    //         //     (action) =>
-    //         //         action.type.endsWith('/fulfilled') && !action.type.includes('fetchFiles'),
-    //         //     (state) => {
-    //         //         state.status = 'succeeded';
-    //         //         state.successMessage = 'Операция выполнена успешно';
-    //         //     }
-    //         // )
-    //         // .addMatcher(
-    //         //     (action) => action.type.endsWith('/rejected'),
-    //         //     (state, action) => {
-    //         //         state.status = 'failed';
-    //         //         state.error = action.payload || 'Произошла ошибка';
-    //         //     }
-    //         // );
-    //         .addMatcher(
-    //             (action) =>
-    //                 action.type.startsWith('files/') &&
-    //                 action.type.endsWith('/fulfilled') &&
-    //                 !action.type.includes('fetchFiles'),
-    //             (state) => {
-    //                 state.status = 'succeeded';
-    //                 state.successMessage = 'Операция выполнена успешно';
-    //                 state.error = null; // При успехе принудительно очищаем старые ошибки
-    //             }
-    //         )
-    //         //  ИСПРАВЛЕНО: реагирует на ошибку только ФАЙЛОВЫХ экшенов (содержат слово 'files/')
-    //         .addMatcher(
-    //             (action) =>
-    //                 action.type.startsWith('files/') &&
-    //                 action.type.endsWith('/rejected'),
-    //             (state, action) => {
-    //                 state.status = 'failed';
-    //                 state.error = action.payload || 'Произошла ошибка';
-    //             }
-    //         );
-    // },
+
     extraReducers: (builder) => {
         builder
             // --- Загрузка списка файлов (fetchFiles) ---

@@ -10,7 +10,7 @@ import {
   cancelRename,
   renameFile,
 } from '../../features/fileStorage/fileStorageSlice.js';
-import './FileList.css'; // Убедитесь, что стили подключены
+import './FileList.css';
 
 // Вспомогательные функции
 const formatDate = (dateString) => {
@@ -105,7 +105,7 @@ const FileList = ({ isAdmin }) => {
                   <div className="rename-controls">
                     <input
                       type="text"
-                      //  ИСПРАВЛЕНО: Связываем инпут с правильным стейтом newFileName
+                      // Связываем инпут с правильным стейтом newFileName
                       value={newFileName || ''}
                       onChange={handleInputChange}
                       className="rename-input"

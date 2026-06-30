@@ -41,7 +41,6 @@ class IsOwnerOrAdmin(BasePermission):
         )
 
 class UserProfileView(APIView):
-    # permission_classes = (IsAuthenticated,)
     permission_classes = (AllowAny,)
 
     def get(self, request):
@@ -49,9 +48,6 @@ class UserProfileView(APIView):
         if request.user and request.user.is_authenticated:
             serializer = UserProfileSerializer(request.user)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        # serializer = UserProfileSerializer(request.user)
-        # return Response(serializer.data)
-        #  ИСПРАВЛЕНО: Если это гость — отдаем пустой ответ со статусом 200 вместо 403!
         return Response(None, status=status.HTTP_200_OK)
     
     def put(self, request):
@@ -87,22 +83,13 @@ class LoginView(APIView):
     permission_classes = (AllowAny,)
 
     def get(self, request):
-        # Теперь этот метод гарантированно установит куку csrftoken на фронтенде
         return Response({'detail': 'CSRF cookie set'})
 
-    # DRF автоматически проверяет CSRF для сессионной аутентификации.
     def post(self, request):
         """
         Аутентификация пользователя по username/password.
         Использует LoginSerializer для валидации.
         """
-        print("--- DEBUG: Входящий запрос на логин ---")
-        print(f"Тело запроса (request.data): {request.data}")
-
-        # Проверяем, пришел ли токен вообще на бэкенд (для отладки в консоли)
-        print(f"CSRF заголовок из браузера: {request.META.get('HTTP_X_CSRFTOKEN')}")
-        print(f"CSRF кука в запросе: {request.COOKIES.get('csrftoken')}")
-
         serializer = LoginSerializer(data=request.data, context={'request': request})
         
         try:
@@ -114,8 +101,6 @@ class LoginView(APIView):
                 return Response({'error': 'Неверные учетные данные.'}, status=status.HTTP_401_UNAUTHORIZED)
 
             login(request, user)
-
-            print(f"--- DEBUG: Пользователь {user.username} успешно вошел ---")
 
             return Response({
                 'user_id': user.id,
@@ -129,9 +114,6 @@ class LoginView(APIView):
                 return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
                 
             import traceback
-            print("--- DEBUG: Неожиданная ошибка при логине ---")
-            print(f"Тип ошибки: {type(e)}")
-            print(f"Сообщение: {e}")
             traceback.print_exc()
 
             return Response(
@@ -247,7 +229,6 @@ class FileUploadView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Создаем объект FileStorage
             file_storage = FileStorage(
                 original_name=file_obj.name,
                 file=file_obj,
@@ -435,42 +416,14 @@ class FileRenameView(APIView):
         serializer = FileStorageSerializer(file_storage, context={'request': request})
         return Response(serializer.data)
 
-# class SharedFileView(APIView):
-#     permission_classes = (AllowAny,)
-
-#     def get(self, request, share_link):
-#         try:
-#             # Преобразуем share_link из строки в UUID
-#             share_link_uuid = uuid.UUID(str(share_link))
-            
-#             file_storage = FileStorage.objects.get(share_link=share_link_uuid)
-            
-#             if file_storage.share_link_expiry and file_storage.share_link_expiry < timezone.now():
-#                 return Response({'error': 'Ссылка истекла'}, status=400)
-
-#             # Обновляем только дату последнего скачивания
-#             file_storage.last_download = timezone.now()
-#             file_storage.save(update_fields=['last_download'])
-
-#             response = FileResponse(file_storage.file, as_attachment=False)
-#             response['Content-Disposition'] = f'inline; filename="{file_storage.original_name}"'
-#             return response
-#         except FileStorage.DoesNotExist:
-#             return Response({'error': 'Файл не найден'}, status=404)
-#         except ValueError as e:
-#             return Response({'error': 'Неверный формат ссылки'}, status=400)
-#         except Exception as e:
-#             return Response({'error': str(e)}, status=500) 
-
 @api_view(['POST']) # Обязательно ПЕРВЫЙ декоратор
-@permission_classes([IsAuthenticated]) # Исправлено: в DRF классы передаются списком []
+@permission_classes([IsAuthenticated]) # в DRF классы передаются списком []
 @csrf_protect # Защищает метод POST от CSRF-атак
 def logout_view(request):
     try:
         logout(request)
         return Response({'message': 'Успешный выход из системы'}, status=status.HTTP_200_OK)
     except Exception as e:
-        # Исправлен лог на ошибку
         logger.error(f"Ошибка при выходе из системы: {str(e)}")
         return Response({'error': 'Не удалось выйти из системы'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

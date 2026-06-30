@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navigation/Navbar';
 import './AdminPanel.css';
 import { useSelector, useDispatch } from 'react-redux';
-// import { fetchUsers, deleteUser, setAdminStatus } from '../features/usersSlice';
 import { fetchUsers, deleteUser, setAdminStatus, clearSuccessMessage, clearError } from '../features/usersSlice';
 
 const AdminPanel = () => {
@@ -26,7 +25,6 @@ const AdminPanel = () => {
                 const csrfToken = getCsrfToken();
                 if (!csrfToken) throw new Error('Отсутствует CSRF токен. Пожалуйста, войдите снова.');
 
-                // ИСПРАВЛЕНО: используем чистый URL, так как в API_URL уже есть префикс /api
                 const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/profile/`, {
                     credentials: 'include',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -159,60 +157,3 @@ const AdminPanel = () => {
 };
 
 export default AdminPanel;
-
-//             <div className="admin-panel-container">
-//                 <h1>Панель администратора</h1>
-
-//                 {successMessage && <div className="success-message">{successMessage}</div>}
-//                 {error && <div className="error-message">{error}</div>}
-
-//                 <h2>Список пользователей</h2>
-//                 {loading ? (
-//                     <p>Загрузка списка пользователей...</p>
-//                 ) : (
-//                     <table className="admin-users-table">
-//                         <thead>
-//                             <tr>
-//                                 <th>ID</th>
-//                                 <th>Имя</th>
-//                                 <th>Email</th>
-//                                 <th>Действия</th>
-//                             </tr>
-//                         </thead>
-//                         <tbody>
-//                             {users && users.map((user) => (
-//                                 <tr key={user.id}>
-//                                     <td>{user.id}</td>
-//                                     <td>{user.username}</td>
-//                                     <td>{user.email}</td>
-//                                     <td>
-//                                         <div className="admin-action-buttons">
-//                                             {/* ДОБАВЛЕНО: Кнопка просмотра файлов пользователя, завязанная на query-параметры */}
-//                                             <button
-//                                                 onClick={() => handleViewUserFiles(user.id)}
-//                                                 className="admin-btn view-files"
-//                                             >
-//                                                 Посмотреть файлы
-//                                             </button>
-//                                             <button
-//                                                 onClick={() => handleDeleteUser(user.id)}
-//                                                 className="admin-btn delete-user"
-//                                             >
-//                                                 Удалить
-//                                             </button>
-//                                         </div>
-//                                     </td>
-//                                 </tr>
-//                             ))}
-//                         </tbody>
-//                     </table>
-//                 )}
-//                 {users && users.length === 0 && !loading && (
-//                     <p className="no-users">В системе нет зарегистрированных пользователей</p>
-//                 )}
-//             </div>
-//         </>
-//     );
-// };
-
-// export default AdminPanel;

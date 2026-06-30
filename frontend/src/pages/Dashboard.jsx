@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { Toaster } from 'react-hot-toast'; //  ДОБАВЛЕН ИМПОРТ (Решает ошибку Toaster is not defined)
+import { Toaster } from 'react-hot-toast';
 import FileList from '../components/FileStorage/FileList';
 import FileUpload from '../components/FileStorage/FileUpload';
 import Navbar from '../components/Navigation/Navbar';
 import './Dashboard.css';
 import { fetchFiles, clearSuccessMessage, clearError, uploadFile } from '../features/fileStorage/fileStorageSlice';
-import { logoutUser } from '../features/auth/authSlice'; //  ДОБАВЛЕН импорт thunk-экшена для правильного выхода
+import { logoutUser } from '../features/auth/authSlice';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -17,7 +17,7 @@ const Dashboard = () => {
   // Получаем данные о файлах из fileStorage
   const { files, status, error, successMessage } = useSelector((state) => state.fileStorage);
 
-  //  ИСПРАВЛЕНО: Извлекаем информацию об админе из authSlice, где хранятся данные залогиненного юзера
+  //  Извлекаем информацию об админе из authSlice, где хранятся данные залогиненного юзера
   const user = useSelector((state) => state.auth.user);
   const isAdmin = user?.is_admin || false;
 
@@ -52,7 +52,7 @@ const Dashboard = () => {
     }
   }, [error, dispatch]);
 
-  //  ИСПРАВЛЕНО: Перевели выход на созданный ранее Thunk, чтобы правильно обрабатывать сессии и CSRF
+  // Перевели выход на созданный ранее Thunk, чтобы правильно обрабатывать сессии и CSRF
   const handleLogout = async () => {
     const resultAction = await dispatch(logoutUser());
     if (logoutUser.fulfilled.match(resultAction)) {

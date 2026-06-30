@@ -33,7 +33,6 @@ const Navbar = () => {
   const username = isAuthenticated ? user.username : '';
 
   // Извлекаем данные о хранилище из объекта пользователя.
-  // Замените имена свойств (used_space, storage_limit), если в вашей Django-модели они называются иначе!
   const usedSpace = user?.used_space || 0;
   const totalSpace = user?.storage_limit || 100 * 1024 * 1024; // По умолчанию 100 МБ, если бэкенд не прислал лимит
 

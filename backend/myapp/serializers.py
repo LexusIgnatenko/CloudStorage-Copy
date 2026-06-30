@@ -3,25 +3,6 @@ from django.contrib.auth import authenticate
 from .models import CustomUser, FileStorage
 from .validators import validate_password
 
-
-# class UserProfileSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = CustomUser
-#         fields = ['id', 'username', 'email', 'is_admin']
-#         read_only_fields = ('username',)
-
-#     def validate_email(self, value):
-#         user = self.context['request'].user
-#         if CustomUser.objects.exclude(pk=user.pk).filter(email=value).exists():
-#             raise serializers.ValidationError("Этот email уже используется!")
-#         return value
-
-#     def validate_username(self, value):
-#         user = self.context['request'].user
-#         if CustomUser.objects.exclude(pk=user.pk).filter(username=value).exists():
-#             raise serializers.ValidationError("Это имя пользователя уже занято.")
-#         return value
-
 class UserProfileSerializer(serializers.ModelSerializer):
     # Добавляем динамические поля для подсчета памяти
     used_space = serializers.SerializerMethodField()
@@ -40,9 +21,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     # Метод возвращает лимит пользователя
     def get_storage_limit(self, obj):
-        # Если в вашей модели CustomUser есть реальное поле (например, storage_limit или max_size), 
-        # верните его: return obj.storage_limit
-        # Если его пока нет, возвращаем фиксированный дефолтный лимит, например, 100 МБ в байтах:
         return getattr(obj, 'storage_limit', 100 * 1024 * 1024)
 
     def validate_email(self, value):

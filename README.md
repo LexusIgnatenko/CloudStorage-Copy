@@ -29,7 +29,7 @@ CREATE USER cloud_user WITH PASSWORD 'your_password';
 ALTER ROLE cloud_user SET client_encoding TO 'utf-8';
 ALTER ROLE cloud_user SET default_transaction_isolation TO 'read committed';
 ALTER ROLE cloud_user SET timezone TO 'UTC';
-GRANT ALL PRIVILEGES ON DATABASE cloud_db TO clouduser;
+GRANT ALL PRIVILEGES ON DATABASE cloud_db TO cloud_user;
 \q
 ```
 
@@ -37,11 +37,11 @@ GRANT ALL PRIVILEGES ON DATABASE cloud_db TO clouduser;
 ```bash
 # Клонирование репозитория
 git clone https://github.com/LexusIgnatenko/CloudStorage-Copy.git
-cd CloudStorage/backend
+cd CloudStorage-Copy/backend
 
 # Создание виртуального окружения
-python3 -m venv env
-source env/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 
 # Установка зависимостей
 pip install -r Requirements.txt
@@ -72,18 +72,18 @@ npm run build
 sudo nano /etc/systemd/system/gunicorn.service
 
 [Unit]
-Description=gunicorn service
+Description=gunicorn daemon
 After=network.target
+
 [Service]
 User=lexus
 Group=www-data
-WorkingDirectory=/home/lexus/CloudStorage/backend
-ExecStart=/home/lexus/CloudStorage/backend/env/bin/gunicorn \
-         --access-logfile -\
-         --workers 3 \
-         --timeout 120 \
-         --bind unix:/home/lexus/CloudStorage/backend/cloud/project.sock cloud.wsgi:application
-Restart=on-failure
+WorkingDirectory=/home/lexus/CloudStorage-Copy/backend
+ExecStart=/home/lexus/CloudStorage-Copy/backend/.venv/bin/gunicorn \
+          --access-logfile - \
+          --workers 3 \
+          --bind 127.0.0.1:8000 cloud.wsgi:application
+
 [Install]
 WantedBy=multi-user.target
 ```
@@ -91,51 +91,38 @@ WantedBy=multi-user.target
 ## 6. Настройка Nginx
 ```bash
 # Создаём файл для nginx
-sudo nano /etc/nginx/sites-available/cloud
+sudo nano /etc/nginx/sites-available/cloudstorage-copy
 
-# Основной сервер (порт 80)
+
 server {
-  listen 80;
-  server_name 194.67.66.92;
-  root /home/lexus/CloudStorage/frontend/dist/;
-  index index.html;
+    listen 80;
+    server_name 194.67.66.92;
 
-  # Обработка основного маршрута
-  location / {
-    try_files $uri $uri/ /index.html;
-    include proxy_params;
-    proxy_pass http://unix:/home/lexus/CloudStorage/backend/cloud/project.sock;
-  }
+    client_max_body_size 10M;
+
+    # 1. Раздача статики (Абсолютный путь!)
+    location /static/ {
+        alias /home/lexus/CloudStorage-Copy/backend/staticfiles/;
+    }
+
+    # 2. Раздача медиа-файлов (Абсолютный путь!)
+    location /media/ {
+        alias /home/lexus/CloudStorage-Copy/backend/media/;
+    }
+
+    # 3. Передаем ВСЕ остальные запросы (включая главную страницу) на Gunicorn
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
-
-# Сервер на порте 8000
-server {
-  listen 8000;
-  server_name 194.67.66.92;
-
-  location / {
-    include proxy_params;
-    proxy_pass http://unix:/home/lexus/CloudStorage/backend/cloud/project.sock;
-  }
-
-  location /static/ {
-    alias /home/lexus/CloudStorage/backend/staticfiles/;
-    expires 30d;
-  }
-
-  location /storage/ {
-    alias /home/lexus/CloudStorage/backend/storage/;
-  }
-
-  location /media/ {
-    alias /home/lexus/CloudStorage/backend/media/;
-    expires 7d;
-  }
-}
-
 
 ### 7. Запуск приложения
 ```bash
+sudo systemctl daemon-reload
 sudo systemctl start gunicorn
 sudo systemctl enable gunicorn
 

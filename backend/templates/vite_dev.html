@@ -34,7 +34,7 @@
   {% else %}
     <!-- ПРОДАКШЕН -->
     {% load django_vite %}
-    {% vite_hmr_client %}
+    {% comment %} {% vite_hmr_client %} {% endcomment %}
     {% vite_asset 'src/main.jsx' %} 
   {% endif %}
 </head>
