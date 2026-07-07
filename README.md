@@ -88,7 +88,7 @@ ExecStart=/home/lexus/CloudStorage-Copy/backend/.venv/bin/gunicorn \
 WantedBy=multi-user.target
 ```
 
-## 6. Настройка Nginx
+### 6. Настройка Nginx
 ```bash
 # Создаём файл для nginx
 sudo nano /etc/nginx/sites-available/cloudstorage-copy
